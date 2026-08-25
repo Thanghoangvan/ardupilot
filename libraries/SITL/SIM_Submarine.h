@@ -60,13 +60,13 @@ protected:
     const float water_density = 1023.6; // (kg/m^3) At a temperature of 25 °C, salinity of 35 g/kg and 1 atm pressure
 
     const struct {
-        float length = 0.457; // x direction (meters)
-        float width  = 0.338; // y direction (meters)
-        float height = 0.254; // z direction (meters)
-        float weight = 10.5;  // (kg)
-        float thrust = 51.48; // (N)
-        float thruster_mount_radius = 0.25; // distance in meters from thrusters to center of mass. Used to calculate torque.
-        float equivalent_sphere_radius = 0.2;
+        float length = 0.869; // x direction (meters)
+        float width  = 0.575; // y direction (meters)
+        float height = 0.35; // z direction (meters)
+        float weight = 11.569;  // (kg)
+        float thrust = 19.62; // (N) // APISQUEEN U1 / U01 underwater thruster.
+        float thruster_mount_radius = 0.3633; // distance in meters from thrusters to center of mass. Used to calculate torque.
+        float equivalent_sphere_radius = 0.211;
         // volume = 4.pi.r³/3
         float volume = 4 * M_PI * powf(equivalent_sphere_radius, 3) / 3;
         float density = 500;

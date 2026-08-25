@@ -25,27 +25,13 @@ using namespace SITL;
 
 static Thruster vectored_thrusters[] =
 {      //       Motor #     Roll Factor     Pitch Factor    Yaw Factor      Throttle Factor     Forward Factor      Lateral Factor
-       Thruster(0,          0,              0,              1.0f,           0,                  -1.0f,              1.0f),
-       Thruster(1,          0,              0,              -1.0f,          0,                  -1.0f,              -1.0f),
-       Thruster(2,          0,              0,              -1.0f,          0,                  1.0f,               1.0f),
-       Thruster(3,          0,              0,              1.0f,           0,                  1.0f,               -1.0f),
-       Thruster(4,          1.0f,           0,              0,              -1.0f,              0,                  0),
-       Thruster(5,          -1.0f,          0,              0,              -1.0f,              0,                  0)
+       Thruster(0,          0,              0,              1.0f,           0,                  0.9659f,              0.2588f),
+       Thruster(1,          0,              0,              -1.0f,          0,                  0.9659f,              -0.2588f),
+       Thruster(2,          0,              0,             0,          1.0f,                   0,               0),
+       Thruster(3,          0,              0,             0,          -1.0f,                  0,               0),
 };
 
 
-static Thruster vectored_6dof_thrusters[] =
-{
-       //       Motor #     Roll Factor     Pitch Factor    Yaw Factor      Throttle Factor     Forward Factor      Lateral Factor
-       Thruster(0,          0,              0,              1.0f,           0,                  -1.0f,              1.0f),
-       Thruster(1,          0,              0,              -1.0f,          0,                  -1.0f,              -1.0f),
-       Thruster(2,          0,              0,              -1.0f,          0,                  1.0f,               1.0f),
-       Thruster(3,          0,              0,              1.0f,           0,                  1.0f,               -1.0f),
-       Thruster(4,          1.0f,           -1.0f,          0,              -1.0f,              0,                  0),
-       Thruster(5,          -1.0f,          -1.0f,          0,              -1.0f,              0,                  0),
-       Thruster(6,          1.0f,           1.0f,           0,              -1.0f,              0,                  0),
-       Thruster(7,          -1.0f,          1.0f,           0,              -1.0f,              0,                  0)
-};
 
 Submarine::Submarine(const char *frame_str) :
     Aircraft(frame_str),
@@ -56,12 +42,8 @@ Submarine::Submarine(const char *frame_str) :
 
     // default to vectored frame
     thrusters = vectored_thrusters;
-    n_thrusters = 6;
+    n_thrusters = 4;
 
-    if (strstr(frame_str, "vectored_6dof")) {
-        thrusters = vectored_6dof_thrusters;
-        n_thrusters = 8;
-    }
     lock_step_scheduled = true;
 
     constexpr float default_battery_resistance_ohm = 0.033;

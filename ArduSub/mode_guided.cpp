@@ -94,7 +94,7 @@ void ModeGuided::guided_pos_control_start()
 
     // initialise yaw
     sub.yaw_rate_only = false;
-    set_auto_yaw_mode(get_default_auto_yaw_mode(false));
+    set_auto_yaw_mode(AUTO_YAW_LOOK_AT_NEXT_WP);
 }
 
 // initialise guided mode's velocity controller
@@ -456,48 +456,126 @@ void ModeGuided::guided_pos_control_run()
         // get pilot's desired yaw rate
         target_yaw_rate = sub.get_pilot_desired_yaw_rate(channel_yaw->get_control_in());
         if (!is_zero(target_yaw_rate)) {
-            set_auto_yaw_mode(AUTO_YAW_HOLD);
+            set_auto_yaw_mode(AUTO_YAW_HOLD); //Neu nguoi dung can thiep tay lai thi giu huong
         } else{
             if (sub.yaw_rate_only){
                 set_auto_yaw_mode(AUTO_YAW_RATE);
             } else{
-                set_auto_yaw_mode(AUTO_YAW_LOOK_AT_HEADING);
+                set_auto_yaw_mode(AUTO_YAW_LOOK_AT_NEXT_WP);
             }
         }
     }
 
+    // set motors to full range
     // set motors to full range
     motors.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
     // run waypoint controller
     sub.failsafe_terrain_set_status(sub.wp_nav.update_wpnav());
 
-    float lateral_out, forward_out;
+    // --- KHAI BÁO BIẾN BẮT BUỘC TRƯỚC KHI DÙNG ---
+    float lateral_out = 0.0f;
+    float forward_out = 0.0f;
     sub.translate_wpnav_rp(lateral_out, forward_out);
-
-    // Send to forward/lateral outputs
-    motors.set_lateral(lateral_out);
-    motors.set_forward(forward_out);
 
     // WP_Nav has set the vertical position control targets
     // run the vertical position controller and set output throttle
     position_control->D_update_controller();
 
-    // call attitude controller
-    if (sub.auto_yaw_mode == AUTO_YAW_HOLD) {
+    // --- 4DoF LOGIC: XỬ LÝ YAW, TĂNG TỐC & DỪNG TẠI ĐÍCH ---
+    float target_yaw_cd = get_auto_heading();
+    float current_yaw_cd = (float)ahrs.yaw_sensor;
+
+    // Tính độ lệch góc Yaw
+    float diff_yaw = target_yaw_cd - current_yaw_cd;
+    while (diff_yaw > 18000.0f)  diff_yaw -= 36000.0f;
+    while (diff_yaw < -18000.0f) diff_yaw += 36000.0f;
+    float yaw_error_cd = fabsf(diff_yaw);
+
+    // 1. KIỂM TRA TRẠNG THÁI DỪNG & ĐIỀU KHIỂN TIẾN/LÙI
+    // if (sub.wp_nav.reached_wp_destination()) {
+    //     // ĐÃ ĐẾN ĐÍCH: Dập hoàn toàn lực tiến về 0
+    //     forward_out = 0.0f;
+    // } else if (yaw_error_cd > 2000.0f) { 
+    //     // CHƯA THẲNG HƯỚNG (> 20 độ): Khóa lực tiến để xoay mũi tại chỗ
+    //     forward_out = 0.1f;
+    // } else { 
+    //     // ĐÃ THẲNG HƯỚNG VÀ DƯỚI BÁN KÍNH ĐÍCH:
+    //     if (forward_out > 0.05f) {
+    //         // Gom lực dạt ngang vào lực tiến (chỉ áp dụng khi tàu muốn TIẾN)
+    //         float total_thrust = sqrtf(forward_out * forward_out + lateral_out * lateral_out);
+            
+    //         // Kích công suất lên tối thiểu 50% khi ở xa
+    //         if (total_thrust < 0.5f) {
+    //             total_thrust =0.7f; 
+    //         }
+    //         forward_out = total_thrust;
+    //     } else if (forward_out < -0.05f) {
+    //         // LỆNH PHANH/LÙI (dấu âm): Giữ nguyên lực âm của WPNav để hãm tàu, không ép thành lực tiến
+    //     } else {
+    //         // Sát đích (lực đẩy quá yếu < 5%): Cho dừng hẳn
+    //         forward_out = 0.0f;
+    //     }
+    // }
+    if (sub.wp_nav.reached_wp_destination()) {
+    // 1. ĐÃ ĐẾN ĐÍCH: Dừng hoàn toàn
+    forward_out = 0.0f;
+     } else {
+    // 2. Tính tổng độ lớn lực đẩy mong muốn từ WPNav (Gom Surge + Sway)
+    float total_thrust = sqrtf(forward_out * forward_out + lateral_out * lateral_out);
+
+    // 3. Tính hệ số suy giảm lực tiến mượt mà theo góc lệch Yaw:
+    // - Lệch 0 độ   -> yaw_factor = 1.0 (Cho phép tiến 100% lực)
+    // - Lệch 22.5 độ -> yaw_factor = 0.5 (Tự động giảm còn 50% lực tiến)
+    // - Lệch >= 45 độ -> yaw_factor = 0.05 (Duy trì 5% lực nhích nhẹ để xoay mũi mượt)
+    float yaw_error_deg = fabsf(yaw_error_cd) * 0.01f; // Đổi centi-degrees sang độ
+    float yaw_factor = 1.0f - (yaw_error_deg / 45.0f);
+    yaw_factor = constrain_float(yaw_factor, 0.05f, 1.0f); // Giới hạn trong khoảng [0.05, 1.0]
+
+    // 4. Áp dụng hệ số suy giảm vào lực tiến (KHÔNG ép cứng công suất lên 0.7)
+    if (forward_out >= 0.0f) {
+        forward_out = total_thrust * yaw_factor;
+    } else {
+        // Lệnh lùi/phanh của WPNav: Giữ nguyên để hãm tàu mượt mà
+        forward_out = forward_out * yaw_factor;
+    }
+
+    // 5. Giới hạn công suất tối đa để bảo vệ dòng điện (ví dụ max 85%)
+    forward_out = constrain_float(forward_out, -0.85f, 0.85f);
+}
+
+    // Xuất lực ra động cơ
+    motors.set_lateral(0.0f);          // Khóa hoàn toàn dạt ngang
+    motors.set_forward(forward_out);  // Tiến/lùi/dừng chính xác
+
+    // WP_Nav has set the vertical position control targets
+    // run the vertical position controller and set output throttle
+    position_control->D_update_controller();
+
+    // 4DOF Modification
+    float roll_target_cd = 0.0f;
+    float pitch_target_cd = channel_pitch->get_control_in();
+    if (sub.auto_yaw_mode == AUTO_YAW_HOLD)
+    {
         // roll & pitch & yaw rate from pilot
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), target_yaw_rate);
-    } else if (sub.auto_yaw_mode == AUTO_YAW_LOOK_AT_HEADING) {
+    }
+    else if (sub.auto_yaw_mode == AUTO_YAW_LOOK_AT_HEADING)
+    {
         // roll, pitch from pilot, yaw & yaw_rate from auto_control
         target_yaw_rate = sub.yaw_look_at_heading_slew * 100.0;
-        attitude_control->input_euler_angle_roll_pitch_slew_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), get_auto_heading(), target_yaw_rate);
-    } else if (sub.auto_yaw_mode == AUTO_YAW_RATE) {
+        attitude_control->input_euler_angle_roll_pitch_slew_yaw_cd(roll_target_cd,pitch_target_cd, get_auto_heading(), target_yaw_rate);
+    }
+    else if (sub.auto_yaw_mode == AUTO_YAW_RATE)
+    {
         // roll, pitch from pilot, yaw_rate from auto_control
         target_yaw_rate = sub.yaw_look_at_heading_slew * 100.0;
-        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), target_yaw_rate);
-    } else {
+        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_cd(roll_target_cd,pitch_target_cd, target_yaw_rate);
+    }
+    else
+    {
         // roll, pitch from pilot, yaw heading from auto_heading()
-        attitude_control->input_euler_angle_roll_pitch_yaw_cd(channel_roll->get_control_in(), channel_pitch->get_control_in(), get_auto_heading(), true);
+        attitude_control->input_euler_angle_roll_pitch_yaw_cd(roll_target_cd, pitch_target_cd,get_auto_heading(), true);
     }
 }
 

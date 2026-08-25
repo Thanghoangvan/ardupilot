@@ -175,9 +175,15 @@ void AP_Motors6DOF::setup_motors(motor_frame_class frame_class, motor_frame_type
         add_motor_raw_6dof(AP_MOTORS_MOT_6,     -1.0f,          0,              0,              -1.0f,              0,                  0,              6);
         break;
 
-    case SUB_FRAME_CUSTOM:
+     case SUB_FRAME_CUSTOM:
         // Put your custom motor setup here
-        //break;
+           //                 Motor #              Roll Factor     Pitch Factor    Yaw Factor      Throttle Factor     Forward Factor      Lateral Factor  Testing Order
+        _frame_class_string="MyROV_4dof";
+         add_motor_raw_6dof(AP_MOTORS_MOT_1, 0, 0, 1.0f, 0, 0.9659f, 0.2588f, 1);
+         add_motor_raw_6dof(AP_MOTORS_MOT_2, 0, 0, -1.0f, 0, 0.9659f, -0.2588f, 2);
+         add_motor_raw_6dof(AP_MOTORS_MOT_3, 0, 0, 0, 1.0f, 0, 0, 3);
+         add_motor_raw_6dof(AP_MOTORS_MOT_4, 0, 0, 0, -1.0f, 0, 0, 4);
+        break;
 
     case SUB_FRAME_SIMPLEROV_3:
         _frame_class_string = "SIMPLEROV_3";
