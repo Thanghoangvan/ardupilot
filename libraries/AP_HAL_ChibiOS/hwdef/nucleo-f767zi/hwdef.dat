@@ -1,9 +1,8 @@
-# hw definition file for Nucleo-F767ZI (STANDARDIZED FROM MATEK F765)
+# hw definition file for Nucleo-F767ZI (BMI088, ICM42688, BMP388 SPI + BMM150 I2C + F103 IOMCU)
 
 MCU STM32F7xx STM32F767xx
 FLASH_SIZE_KB 2048
 
-# Nạp trực tiếp qua ST-LINK từ địa chỉ 0x08000000
 FLASH_RESERVE_START_KB 0
 APJ_BOARD_ID 1767
 
@@ -16,71 +15,111 @@ STM32_ST_USE_TIMER 12
 define CH_CFG_ST_RESOLUTION 16
 
 # ====================================================
-# SERIAL & MAVLINK (USART3 ST-LINK)
+# DRIVER CONFIG
 # ====================================================
-SERIAL_ORDER USART3 OTG1
+define HAL_USE_I2C TRUE
+define HAL_USE_ADC FALSE
+define AP_WATCHDOG_ENABLED 0
+
+define AP_BARO_BMP388_ENABLED 1
+define AP_COMPASS_BMM150_ENABLED 1
+
+# ====================================================
+# IOMCU CONFIGURATION (Giao tiếp với STM32F103 IOMCU)
+# ====================================================
+define IOMCU_UART UART5
+
+PB6 UART5_TX UART5 SPEED_HIGH
+PB5 UART5_RX UART5 SPEED_HIGH
+
+# ====================================================
+# SERIAL & MAVLINK
+# ====================================================
+SERIAL_ORDER USART3 UART7 OTG1
 
 STDOUT_SERIAL SD3
 STDOUT_BAUDRATE 115200
 
-PD8 USART3_TX USART3 SPEED_HIGH
-PD9 USART3_RX USART3 SPEED_HIGH
+PD8 USART3_TX USART3
+PD9 USART3_RX USART3
+
+PE8 UART7_TX UART7
+PE7 UART7_RX UART7
 
 PA11 OTG_FS_DM OTG1
 PA12 OTG_FS_DP OTG1
 
 # ====================================================
-# SPI4 - IMU ICM-42688 (CẤU HÌNH THEO CHUẨN MATEK)
-# ====================================================
-PE4 ICM_CS CS
-PE2 SPI4_SCK  SPI4
-PE5 SPI4_MISO SPI4
-PE6 SPI4_MOSI SPI4
-
-# Tốc độ boot 1MHz (chuẩn Matek) -> Tốc độ chạy 8MHz
-SPIDEV icm42688 SPI4 DEVID1 ICM_CS MODE3 1*MHZ 8*MHZ
-IMU Invensensev3 SPI:icm42688 ROTATION_NONE
-
-# ====================================================
-# I2C1 - BARO BMP388 & COMPASS BMM150
+# I2C BUS CONFIGURATION (PB8 - SCL, PB9 - SDA)
 # ====================================================
 I2C_ORDER I2C1
 
 PB8 I2C1_SCL I2C1 PULLUP
 PB9 I2C1_SDA I2C1 PULLUP
 
-define HAL_I2C_BUS0_SPEED 100000
+define HAL_I2C_BUS0_SPEED 400000
 define HAL_I2C_CLEAR_BUS 1
 
-# Cảm biến áp suất khí quyển
-BARO BMP388 I2C:0:0x76
+# ====================================================
+# SPI BUS CONFIGURATION & PIN MAPPING
+# ====================================================
+SPI_ORDER SPI3 SPI4
+
+# --- BUS SPI3: BMI088 (IMU 1) ---
+# PC10 SPI3_SCK SPI3
+# PC11 SPI3_MISO SPI3
+# PC12 SPI3_MOSI SPI3
+
+# --- BUS SPI4: BMP388 (Baro) & ICM42688 (IMU 2) ---
+PE2 SPI4_SCK SPI4
+PE5 SPI4_MISO SPI4
+PE6 SPI4_MOSI SPI4
+
+# Chân Chip Select
+# PD2 BMI088_ACC_CS CS PULLUP
+# PD3 BMI088_GYR_CS CS PULLUP
+PE3 ICM42688_CS   CS PULLUP
+PE4 BMP388_CS     CS PULLUP
 
 # ====================================================
-# COMPASS BMM150 (GÁN TRỰC TIẾP TRÊN I2C1 - BUS LOGIC 0)
+# SPIDEV DEFINITIONS
 # ====================================================
-# 0x13 là địa chỉ 7-bit (tương đương 0x26 ở dạng 8-bit khi chân SDO/ADDR nối VDD/3.3V)
-# Nếu chân SDO/ADDR nối GND, hãy đổi 0x13 thành 0x10
+# SPIDEV bmi088_a SPI3 DEVID1 BMI088_ACC_CS MODE3 2*MHZ 8*MHZ
+# SPIDEV bmi088_g SPI3 DEVID2 BMI088_GYR_CS MODE3 2*MHZ 8*MHZ
+
+SPIDEV bmp388   SPI4 DEVID1 BMP388_CS     MODE3 1*MHZ 8*MHZ
+SPIDEV icm42688 SPI4 DEVID2 ICM42688_CS   MODE3 2*MHZ 8*MHZ
+
+# ====================================================
+# SENSOR MAPPING
+# ====================================================
+# IMU 1: BMI088
+# IMU BMI088 SPI:bmi088_a SPI:bmi088_g ROTATION_NONE
+
+# IMU 2: ICM42688 (Dùng driver Invensensev3)
+IMU Invensensev3 SPI:icm42688 ROTATION_NONE
+
+# Baro & Compass
+BARO BMP388 SPI:bmp388
 COMPASS BMM150 I2C:0:0x13 true ROTATION_NONE
 
-# Bật Driver BMM150 và tắt Driver HMC
-define AP_COMPASS_BMM150_ENABLED 1
-
-
-# Tự động phân bổ DMA & Hệ thống
+# ====================================================
+# SYSTEM & DMA CONFIGURATION
+# ====================================================
 DMA_PRIORITY S*
-define HAL_USE_ADC FALSE
-define AP_WATCHDOG_ENABLED 0
 
 # ====================================================
-# PWM ĐỘNG CƠ (4 Kênh - TIM1)
+# PWM OUTPUT (Tự động chuyển kênh 1-8 sang STM32F103 IOMCU)
 # ====================================================
-PE9  TIM1_CH1 TIM1 PWM(1) GPIO(50)
-PE11 TIM1_CH2 TIM1 PWM(2) GPIO(51)
-PE13 TIM1_CH3 TIM1 PWM(3) GPIO(52)
-PE14 TIM1_CH4 TIM1 PWM(4) GPIO(53)
+# Lưu ý: Khi bật HAL_WITH_IO_MCU 1, các kênh PWM 1-8 tự động do F103 quản lý.
+# Nếu muốn xuất thêm PWM phụ (AUX 9-12) trực tiếp từ F7, bạn có thể gán:
+# PE9  TIM1_CH1 TIM1 PWM(9)  GPIO(50)
+# PE11 TIM1_CH2 TIM1 PWM(10) GPIO(51)
+# PE13 TIM1_CH3 TIM1 PWM(11) GPIO(52)
+# PE14 TIM1_CH4 TIM1 PWM(12) GPIO(53)
 
 # ====================================================
-# BỘ NHỚ LƯU PARAMETER & SWD
+# SYSTEM & FLASH
 # ====================================================
 PB0 LED0 OUTPUT LOW GPIO(90)
 define HAL_GPIO_A_LED_PIN 90

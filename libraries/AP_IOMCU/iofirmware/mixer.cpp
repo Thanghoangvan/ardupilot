@@ -123,106 +123,128 @@ int16_t AP_IOMCU_FW::mix_elevon_vtail(int16_t angle1, int16_t angle2, bool first
  */
 void AP_IOMCU_FW::run_mixer(void)
 {
-    int16_t rcin[4] = {0, 0, 0, 0};
-    int16_t &roll = rcin[0];
-    int16_t &pitch = rcin[1];
-    int16_t &throttle = rcin[2];
-    int16_t &rudder = rcin[3];
+    // int16_t rcin[4] = {0, 0, 0, 0};
+    // int16_t &roll = rcin[0];
+    // int16_t &pitch = rcin[1];
+    // int16_t &throttle = rcin[2];
+    // int16_t &rudder = rcin[3];
 
-    // get RC input angles
-    if (rc_input.flags_rc_ok) {
-        for (uint8_t i=0;i<4; i++) {
-            if (mixing.rc_channel[i] > 0 && mixing.rc_channel[i] <= IOMCU_MAX_RC_CHANNELS) {
-                uint8_t chan = mixing.rc_channel[i]-1;
-                if (i == 2 && !mixing.throttle_is_angle) {
-                    rcin[i] = mix_input_range(i, rc_input.pwm[chan]);
-                } else {
-                    rcin[i] = mix_input_angle(i, rc_input.pwm[chan]);
-                }
-            }
-        }
-    }
+    // // get RC input angles
+    // if (rc_input.flags_rc_ok) {
+    //     for (uint8_t i=0;i<4; i++) {
+    //         if (mixing.rc_channel[i] > 0 && mixing.rc_channel[i] <= IOMCU_MAX_RC_CHANNELS) {
+    //             uint8_t chan = mixing.rc_channel[i]-1;
+    //             if (i == 2 && !mixing.throttle_is_angle) {
+    //                 rcin[i] = mix_input_range(i, rc_input.pwm[chan]);
+    //             } else {
+    //                 rcin[i] = mix_input_angle(i, rc_input.pwm[chan]);
+    //             }
+    //         }
+    //     }
+    // }
 
-    // Never output throttle if the vehicle was disarmed when we last heard from the FMU
+    // // Never output throttle if the vehicle was disarmed when we last heard from the FMU
+    // if (!hal.util->get_soft_armed()) {
+    //     throttle = 0;
+    // }
+
+    // for (uint8_t i=0; i<IOMCU_MAX_RC_CHANNELS; i++) {
+    //     SRV_Channel::Function function = (SRV_Channel::Function)mixing.servo_function[i];
+    //     uint16_t &pwm = reg_direct_pwm.pwm[i];
+
+    //     if (mixing.manual_rc_mask & (1U<<i)) {
+    //         // treat as pass-thru if this channel is set in MANUAL_RC_MASK
+    //         function = SRV_Channel::k_manual;
+    //     }
+
+    //     switch (function) {
+    //     case SRV_Channel::k_manual:
+    //         pwm = rc_input.pwm[i];
+    //         break;
+
+    //     case SRV_Channel::k_rcin1 ... SRV_Channel::k_rcin16:
+    //         pwm = rc_input.pwm[(uint8_t)(function - SRV_Channel::k_rcin1)];
+    //         break;
+
+    //     case SRV_Channel::k_aileron:
+    //     case SRV_Channel::k_aileron_with_input:
+    //     case SRV_Channel::k_flaperon_left:
+    //     case SRV_Channel::k_flaperon_right:
+    //         pwm = mix_output_angle(i, roll);
+    //         break;
+
+    //     case SRV_Channel::k_elevator:
+    //     case SRV_Channel::k_elevator_with_input:
+    //         pwm = mix_output_angle(i, pitch);
+    //         break;
+
+    //     case SRV_Channel::k_rudder:
+    //     case SRV_Channel::k_steering:
+    //         pwm = mix_output_angle(i, rudder);
+    //         break;
+
+    //     case SRV_Channel::k_throttle:
+    //     case SRV_Channel::k_throttleLeft:
+    //     case SRV_Channel::k_throttleRight:
+    //         if (mixing.throttle_is_angle) {
+    //             pwm = mix_output_angle(i, throttle);
+    //         } else {
+    //             pwm = mix_output_range(i, throttle);
+    //         }
+    //         break;
+
+    //     case SRV_Channel::k_flap:
+    //     case SRV_Channel::k_flap_auto:
+    //         // zero flaps
+    //         pwm = mix_output_range(i, 0);
+    //         break;
+
+    //     case SRV_Channel::k_elevon_left:
+    //     case SRV_Channel::k_dspoilerLeft1:
+    //     case SRV_Channel::k_dspoilerLeft2:
+    //         // treat differential spoilers as elevons
+    //         pwm = mix_output_angle(i, mix_elevon_vtail(roll, pitch, true));
+    //         break;
+
+    //     case SRV_Channel::k_elevon_right:
+    //     case SRV_Channel::k_dspoilerRight1:
+    //     case SRV_Channel::k_dspoilerRight2:
+    //         // treat differential spoilers as elevons
+    //         pwm = mix_output_angle(i, mix_elevon_vtail(roll, pitch, false));
+    //         break;
+
+    //     case SRV_Channel::k_vtail_left:
+    //         pwm = mix_output_angle(i, mix_elevon_vtail(rudder, pitch, false));
+    //         break;
+
+    //     case SRV_Channel::k_vtail_right:
+    //         pwm = mix_output_angle(i, mix_elevon_vtail(rudder, pitch, true));
+    //         break;
+
+    //     default:
+    //         break;
+    //     }
+    // }
+    // --- CHẾ ĐỘ FAILSAFE ROV KHI F7 BỊ TREO ---
+
+    // 1. Nếu trước khi F7 bị treo mà tàu chưa ARM -> Khóa an toàn, ép tất cả về 1500us
     if (!hal.util->get_soft_armed()) {
-        throttle = 0;
+        for (uint8_t i = 0; i < IOMCU_MAX_RC_CHANNELS; i++) {
+            reg_direct_pwm.pwm[i] = 1500;
+        }
+        return;
     }
 
-    for (uint8_t i=0; i<IOMCU_MAX_RC_CHANNELS; i++) {
-        SRV_Channel::Function function = (SRV_Channel::Function)mixing.servo_function[i];
-        uint16_t &pwm = reg_direct_pwm.pwm[i];
-
-        if (mixing.manual_rc_mask & (1U<<i)) {
-            // treat as pass-thru if this channel is set in MANUAL_RC_MASK
-            function = SRV_Channel::k_manual;
-        }
-
-        switch (function) {
-        case SRV_Channel::k_manual:
-            pwm = rc_input.pwm[i];
-            break;
-
-        case SRV_Channel::k_rcin1 ... SRV_Channel::k_rcin16:
-            pwm = rc_input.pwm[(uint8_t)(function - SRV_Channel::k_rcin1)];
-            break;
-
-        case SRV_Channel::k_aileron:
-        case SRV_Channel::k_aileron_with_input:
-        case SRV_Channel::k_flaperon_left:
-        case SRV_Channel::k_flaperon_right:
-            pwm = mix_output_angle(i, roll);
-            break;
-
-        case SRV_Channel::k_elevator:
-        case SRV_Channel::k_elevator_with_input:
-            pwm = mix_output_angle(i, pitch);
-            break;
-
-        case SRV_Channel::k_rudder:
-        case SRV_Channel::k_steering:
-            pwm = mix_output_angle(i, rudder);
-            break;
-
-        case SRV_Channel::k_throttle:
-        case SRV_Channel::k_throttleLeft:
-        case SRV_Channel::k_throttleRight:
-            if (mixing.throttle_is_angle) {
-                pwm = mix_output_angle(i, throttle);
-            } else {
-                pwm = mix_output_range(i, throttle);
-            }
-            break;
-
-        case SRV_Channel::k_flap:
-        case SRV_Channel::k_flap_auto:
-            // zero flaps
-            pwm = mix_output_range(i, 0);
-            break;
-
-        case SRV_Channel::k_elevon_left:
-        case SRV_Channel::k_dspoilerLeft1:
-        case SRV_Channel::k_dspoilerLeft2:
-            // treat differential spoilers as elevons
-            pwm = mix_output_angle(i, mix_elevon_vtail(roll, pitch, true));
-            break;
-
-        case SRV_Channel::k_elevon_right:
-        case SRV_Channel::k_dspoilerRight1:
-        case SRV_Channel::k_dspoilerRight2:
-            // treat differential spoilers as elevons
-            pwm = mix_output_angle(i, mix_elevon_vtail(roll, pitch, false));
-            break;
-
-        case SRV_Channel::k_vtail_left:
-            pwm = mix_output_angle(i, mix_elevon_vtail(rudder, pitch, false));
-            break;
-
-        case SRV_Channel::k_vtail_right:
-            pwm = mix_output_angle(i, mix_elevon_vtail(rudder, pitch, true));
-            break;
-
-        default:
-            break;
-        }
+    // 2. Nếu F7 bị treo trong lúc tàu ĐANG ARM (đang dưới nước):
+    // Ép tất cả các kênh về 1500us (dừng động cơ ngang)
+    for (uint8_t i = 0; i < IOMCU_MAX_RC_CHANNELS; i++) {
+        reg_direct_pwm.pwm[i] = 1500;
     }
+
+    // Kích hoạt 2 động cơ đứng (Motor 3 & 4) quay lên 1700us để đẩy nổi tàu
+    reg_direct_pwm.pwm[2] = 1700; // PWM3 - PB8 (Motor 3)
+    reg_direct_pwm.pwm[3] = 1300; // PWM4 - PB9 (Motor 4)
+
+    // Kết thúc hàm, không chạy logic mixer cánh bằng ở bên dưới nữa
+    return;
 }
