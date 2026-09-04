@@ -1,128 +1,120 @@
-# hw definition file for Nucleo-F767ZI (BMI088, ICM42688, BMP388 SPI + BMM150 I2C + F103 IOMCU)
+# hw definition file for Nucleo-F767ZI (STANDARDIZED FOR NUCLEO HARDWARE)
 
 MCU STM32F7xx STM32F767xx
 FLASH_SIZE_KB 2048
 
+# Chạy trực tiếp từ địa chỉ 0x08000000, không dùng bootloader
 FLASH_RESERVE_START_KB 0
 APJ_BOARD_ID 1767
 
+# Cấu hình Xung nhịp chuẩn cho mạch Nucleo (Nhận từ ST-Link MCO)
 OSCILLATOR_HZ 8000000
 define HAL_EXPECTED_SYSCLK 216000000
 define STM32_HSE_BYPASS TRUE
 define AP_BOOTLOADER_FLASHING_ENABLED 0
 
-STM32_ST_USE_TIMER 12
-define CH_CFG_ST_RESOLUTION 16
+# Sử dụng Timer 5 (32-bit) làm System Tick cho ChibiOS
+STM32_ST_USE_TIMER 5
 
-# ====================================================
-# DRIVER CONFIG
-# ====================================================
+# Kích hoạt Driver Hệ thống
 define HAL_USE_I2C TRUE
+define HAL_MAX_I2C_BUSES 1
 define HAL_USE_ADC FALSE
-define AP_WATCHDOG_ENABLED 0
 
-define AP_BARO_BMP388_ENABLED 1
-define AP_COMPASS_BMM150_ENABLED 1
-
-# ====================================================
-# IOMCU CONFIGURATION (Giao tiếp với STM32F103 IOMCU)
-# ====================================================
-define IOMCU_UART UART5
-
-PB6 UART5_TX UART5 SPEED_HIGH
-PB5 UART5_RX UART5 SPEED_HIGH
+# BẮT BUỘC BẬT: Hệ thống tự cứu hộ (Watchdog) để bảo vệ chip
+define AP_WATCHDOG_ENABLED 1
 
 # ====================================================
 # SERIAL & MAVLINK
 # ====================================================
-SERIAL_ORDER USART3 UART7 OTG1
+SERIAL_ORDER USART3 OTG1
 
-STDOUT_SERIAL SD3
-STDOUT_BAUDRATE 115200
-
-PD8 USART3_TX USART3
-PD9 USART3_RX USART3
-
-PE8 UART7_TX UART7
-PE7 UART7_RX UART7
+PD8 USART3_TX USART3 SPEED_HIGH NODMA
+PD9 USART3_RX USART3 SPEED_HIGH NODMA
 
 PA11 OTG_FS_DM OTG1
 PA12 OTG_FS_DP OTG1
 
 # ====================================================
-# I2C BUS CONFIGURATION (PB8 - SCL, PB9 - SDA)
+# SPI CONFIGURATION (SPI3 & SPI4)
+# ====================================================
+SPI_ORDER SPI3 SPI4
+
+# --- SPI3: BMI088 ---
+PC10 SPI3_SCK  SPI3
+PC11 SPI3_MISO SPI3
+PC12 SPI3_MOSI SPI3
+
+PD2 BMI088_ACCEL_CS CS
+PD3 BMI088_GYRO_CS CS
+
+SPIDEV bmi088_a SPI3 DEVID1 BMI088_ACCEL_CS MODE3 2*MHZ 10*MHZ
+SPIDEV bmi088_g SPI3 DEVID2 BMI088_GYRO_CS MODE3 2*MHZ 10*MHZ
+
+IMU BMI088 SPI:bmi088_a SPI:bmi088_g ROTATION_NONE
+
+# --- SPI4: ICM42688 & BMP388 ---
+PE2 SPI4_SCK  SPI4
+PE5 SPI4_MISO SPI4
+PE6 SPI4_MOSI SPI4
+
+PE3 ICM42688_CS CS
+PE4 BMP388_CS CS
+
+SPIDEV icm42688 SPI4 DEVID1 ICM42688_CS MODE3 2*MHZ 8*MHZ
+SPIDEV bmp388   SPI4 DEVID2 BMP388_CS   MODE3 2*MHZ 10*MHZ
+
+IMU ICM42688 SPI:icm42688 ROTATION_NONE
+BARO BMP388 SPI:bmp388
+
+# ====================================================
+# I2C1 - COMPASS BMM150
 # ====================================================
 I2C_ORDER I2C1
 
 PB8 I2C1_SCL I2C1 PULLUP
 PB9 I2C1_SDA I2C1 PULLUP
 
-define HAL_I2C_BUS0_SPEED 400000
+define HAL_I2C_BUS0_SPEED 100000
 define HAL_I2C_CLEAR_BUS 1
 
-# ====================================================
-# SPI BUS CONFIGURATION & PIN MAPPING
-# ====================================================
-SPI_ORDER SPI3 SPI4
-
-# --- BUS SPI3: BMI088 (IMU 1) ---
-# PC10 SPI3_SCK SPI3
-# PC11 SPI3_MISO SPI3
-# PC12 SPI3_MOSI SPI3
-
-# --- BUS SPI4: BMP388 (Baro) & ICM42688 (IMU 2) ---
-PE2 SPI4_SCK SPI4
-PE5 SPI4_MISO SPI4
-PE6 SPI4_MOSI SPI4
-
-# Chân Chip Select
-# PD2 BMI088_ACC_CS CS PULLUP
-# PD3 BMI088_GYR_CS CS PULLUP
-PE3 ICM42688_CS   CS PULLUP
-PE4 BMP388_CS     CS PULLUP
+define AP_COMPASS_BMM150_ENABLED 1
+COMPASS BMM150 I2C:0:0x13 false ROTATION_NONE
 
 # ====================================================
-# SPIDEV DEFINITIONS
+# PWM OUTPUTS
 # ====================================================
-# SPIDEV bmi088_a SPI3 DEVID1 BMI088_ACC_CS MODE3 2*MHZ 8*MHZ
-# SPIDEV bmi088_g SPI3 DEVID2 BMI088_GYR_CS MODE3 2*MHZ 8*MHZ
-
-SPIDEV bmp388   SPI4 DEVID1 BMP388_CS     MODE3 1*MHZ 8*MHZ
-SPIDEV icm42688 SPI4 DEVID2 ICM42688_CS   MODE3 2*MHZ 8*MHZ
-
-# ====================================================
-# SENSOR MAPPING
-# ====================================================
-# IMU 1: BMI088
-# IMU BMI088 SPI:bmi088_a SPI:bmi088_g ROTATION_NONE
-
-# IMU 2: ICM42688 (Dùng driver Invensensev3)
-IMU Invensensev3 SPI:icm42688 ROTATION_NONE
-
-# Baro & Compass
-BARO BMP388 SPI:bmp388
-COMPASS BMM150 I2C:0:0x13 true ROTATION_NONE
+PE9  TIM1_CH1 TIM1 PWM(1) GPIO(50)
+PE11 TIM1_CH2 TIM1 PWM(2) GPIO(51)
+PE13 TIM1_CH3 TIM1 PWM(3) GPIO(52)
+PE14 TIM1_CH4 TIM1 PWM(4) GPIO(53)
 
 # ====================================================
-# SYSTEM & DMA CONFIGURATION
+# IOMCU CONFIGURATION
+# ====================================================
+PE7 UART7_RX UART7 SPEED_HIGH 
+PE8 UART7_TX UART7 SPEED_HIGH 
+
+IOMCU_UART UART7
+
+# define HAL_WITH_IO_MCU 1
+# define IOMCU_CHANNELS 8
+# define HAL_RCIN_CONFIG HAL_RCIN_IO_MCU
+# define HAL_IOMCU_ALLOW_FIRMWARE_UPDATE 1
+
+# ====================================================
+# TỰ ĐỘNG PHÂN BỔ DMA & HỆ THỐNG
 # ====================================================
 DMA_PRIORITY S*
+define AP_COMPASS_PROBING_ENABLED 1
 
 # ====================================================
-# PWM OUTPUT (Tự động chuyển kênh 1-8 sang STM32F103 IOMCU)
+# BỘ NHỚ LƯU PARAMETER & SWD & LED
 # ====================================================
-# Lưu ý: Khi bật HAL_WITH_IO_MCU 1, các kênh PWM 1-8 tự động do F103 quản lý.
-# Nếu muốn xuất thêm PWM phụ (AUX 9-12) trực tiếp từ F7, bạn có thể gán:
-# PE9  TIM1_CH1 TIM1 PWM(9)  GPIO(50)
-# PE11 TIM1_CH2 TIM1 PWM(10) GPIO(51)
-# PE13 TIM1_CH3 TIM1 PWM(11) GPIO(52)
-# PE14 TIM1_CH4 TIM1 PWM(12) GPIO(53)
-
-# ====================================================
-# SYSTEM & FLASH
-# ====================================================
+# Đèn LED LD1 trên bo Nucleo-F767ZI nằm ở chân PB0
 PB0 LED0 OUTPUT LOW GPIO(90)
 define HAL_GPIO_A_LED_PIN 90
+define HAL_LED_ON 1
 
 PA13 JTMS-SWDIO SWD
 PA14 JTCK-SWCLK SWD
@@ -132,3 +124,6 @@ define DMA_RESERVE_SIZE 8192
 
 STORAGE_FLASH_PAGE 10
 define HAL_STORAGE_SIZE 16384
+
+ROMFS io_firmware.bin Tools/IO_Firmware/iofirmware_f103_lowpolh.bin
+env BUILD_ABIN True
